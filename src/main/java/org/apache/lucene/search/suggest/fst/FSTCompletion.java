@@ -45,6 +45,7 @@ public class FSTCompletion {
     /** UTF-8 bytes of the suggestion */
     public final BytesRef utf8;
     /** source bucket (weight) of the suggestion */
+    //bucket：建议的权重，可以理解为在多大的范围（编辑距离）内的建议
     public final int bucket;
 
     Completion(BytesRef key, int bucket) {
@@ -77,22 +78,26 @@ public class FSTCompletion {
   /**
    * Finite state automaton encoding all the lookup terms. See class notes for
    * details.
+   * 用压缩的字节数组表示的状态机
    */
   private final FST<Object> automaton;
 
   /**
    * An array of arcs leaving the root automaton state and encoding weights of
    * all completions in their sub-trees.
+   * 离开状态机的root点的弧，表示所有子树上自动完成的权重
    */
   private final Arc<Object>[] rootArcs;
 
   /**
    * @see #FSTCompletion(FST, boolean, boolean)
+   * 是否在结果中的第一个位置存放完全匹配的那个结果
    */
   private boolean exactFirst;
 
   /**
    * @see #FSTCompletion(FST, boolean, boolean)
+   * 是否高流行的建议优先，此项为默认行为。
    */
   private boolean higherWeightsFirst;
 
@@ -132,6 +137,7 @@ public class FSTCompletion {
   /**
    * Cache the root node's output arcs starting with completions with the
    * highest weights.
+   * 缓存root节点输出的弧中最高权重的自动完成
    */
   @SuppressWarnings({"all"})
   private static Arc<Object>[] cacheRootArcs(FST<Object> automaton) {
@@ -139,8 +145,10 @@ public class FSTCompletion {
       List<Arc<Object>> rootArcs = new ArrayList<Arc<Object>>();
       Arc<Object> arc = automaton.getFirstArc(new Arc<Object>());
       FST.BytesReader fstReader = automaton.getBytesReader(0);
+      //顺着arc下去，读arc的target的第一个弧。
+      //target指向某个节点（Node，Node可能是地址（address）或顺序（ord））
       automaton.readFirstTargetArc(arc, arc, fstReader);
-      while (true) {
+      while (true) {//依次把各个弧都缓存到rootArcs中
         rootArcs.add(new Arc<Object>().copyFrom(arc));
         if (arc.isLast()) break;
         automaton.readNextArc(arc, fstReader);
@@ -156,6 +164,9 @@ public class FSTCompletion {
   /**
    * Returns the first exact match by traversing root arcs, starting from the
    * arc <code>rootArcIndex</code>.
+   * 
+   * 遍历root的各个弧，返回从rootArcIndex开始的第一个完全匹配。
+   * 返回的是bucket
    * 
    * @param rootArcIndex
    *          The first root arc index in {@link #rootArcs} to consider when
@@ -177,8 +188,8 @@ public class FSTCompletion {
         final FST.Arc<Object> rootArc = rootArcs[rootArcIndex];
         final FST.Arc<Object> arc = scratch.copyFrom(rootArc);
         
-        // Descend into the automaton using the key as prefix.
-        if (descendWithPrefix(arc, utf8)) {
+        // Descend into the automaton using the key as prefix.通过前缀递归下降寻找
+        if (descendWithPrefix(arc, utf8)) {//如果通过前缀能找到
           automaton.readFirstTargetArc(arc, arc, fstReader);
           if (arc.label == FST.END_LABEL) {
             // Normalize prefix-encoded weight.
@@ -197,7 +208,7 @@ public class FSTCompletion {
   
   /**
    * Lookup suggestions to <code>key</code>.
-   * 
+   * 根据key来查询自动完成/建议
    * @param key
    *          The prefix to which suggestions should be sought.
    * @param num
@@ -248,7 +259,7 @@ public class FSTCompletion {
 
   /**
    * Lookup suggestions sorted by weight (descending order).
-   * 
+   * 获得查找建议（降序排列），这个才是核心方法
    * @param collectAll
    *          If <code>true</code>, the routine terminates immediately when
    *          <code>num</code> suggestions have been collected. If
@@ -266,7 +277,7 @@ public class FSTCompletion {
     for (int i = 0; i < rootArcs.length; i++) {
       final FST.Arc<Object> rootArc = rootArcs[i];
       final FST.Arc<Object> arc = new FST.Arc<Object>().copyFrom(rootArc);
-
+      //对rootArc的每个弧，做递归下降的前缀寻找
       // Descend into the automaton using the key as prefix.
       if (descendWithPrefix(arc, key)) {
         // A subgraph starting from the current node has the completions
@@ -323,7 +334,7 @@ public class FSTCompletion {
   /**
    * Descend along the path starting at <code>arc</code> and going through bytes
    * in the argument.
-   * 
+   * 从arc开始沿着路径递归下降寻找utf8.如果找到的话，arc会被设置为utf8的最后一个字节并返回true
    * @param arc
    *          The starting arc. This argument is modified in-place.
    * @param utf8
@@ -334,13 +345,14 @@ public class FSTCompletion {
    */
   private boolean descendWithPrefix(Arc<Object> arc, BytesRef utf8)
       throws IOException {
-    final int max = utf8.offset + utf8.length;
+    final int max = utf8.offset + utf8.length;//最大寻找长度。
     // Cannot save as instance var since multiple threads
     // can use FSTCompletion at once...
     final FST.BytesReader fstReader = automaton.getBytesReader(0);
     for (int i = utf8.offset; i < max; i++) {
       if (automaton.findTargetArc(utf8.bytes[i] & 0xff, arc, arc, fstReader) == null) {
         // No matching prefixes, return an empty result.
+    	// 因为是寻找前缀，所以如果前面的字符没有找到，就肯定不会找到了，直接返回
         return false;
       }
     }

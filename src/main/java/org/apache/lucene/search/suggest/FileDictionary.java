@@ -30,6 +30,11 @@ import org.apache.lucene.util.IOUtils;
 /**
  * Dictionary represented by a text file.
  * 
+ * 一个文本文件表示的词典
+ * 格式如下：
+ * 每行一个字符串，可以跟着tab分隔的整数作为freq；
+ * 如果没有跟整数，则freq默认为1
+ * 
  * <p/>Format allowed: 1 string per line, optionally with a tab-separated integer value:<br/>
  * word1 TAB 100<br/>
  * word2 word3 TAB 101<br/>
