@@ -32,6 +32,16 @@ import org.apache.lucene.util.PriorityQueue;
  *   <li>exactly the above count of bytes for the sequence to be sorted.
  * </ul>
  * 
+ * 对字节数组进行外部排序。每个字节数组都由以下2部分组成：
+ * 1.字节数组的长度（2个字节表示）
+ * 2.待排序的字节数组，其长度如前2个字节所示
+ *
+ * 提供如下内部类：
+ * BufferSize：提供一个更具描述性的缓冲区
+ * SortInfo：排序时的一些指标。for debug
+ * ByteSequencesReader：读Sort使用的这种以length开头的字节数组
+ * ByteSequencesWriter：向一个文件中写排好序的字节数组
+ * 
  * @see #sort(File, File)
  * @lucene.experimental
  * @lucene.internal
@@ -92,7 +102,8 @@ public final class Sort {
      * Approximately half of the currently available free heap, but no less
      * than {@link #ABSOLUTE_MIN_SORT_BUFFER_SIZE}. However if current heap allocation 
      * is insufficient or if there is a large portion of unallocated heap-space available 
-     * for sorting consult with max allowed heap size. 
+     * for sorting consult with max allowed heap size.
+     * 创建一个大小大概为可用堆空间一半的BufferSize，但不小于规定的最小BufferSize 
      */
     public static BufferSize automatic() {
       Runtime rt = Runtime.getRuntime();
@@ -387,7 +398,8 @@ public final class Sort {
     }
   }
 
-  /** Read in a single partition of data */
+  /** Read in a single partition of data 
+   * 一个partition的大小是BytesRefList设定的一个默认大小*/
   int readPartition(ByteSequencesReader reader) throws IOException {
     long start = System.currentTimeMillis();
     final BytesRef scratch = new BytesRef();
@@ -478,6 +490,7 @@ public final class Sort {
   /**
    * Utility class to read length-prefixed byte[] entries from an input.
    * Complementary to {@link ByteSequencesWriter}.
+   * 用装饰器模式封装了一个DataInput，来读以length开头的字节数组
    */
   public static class ByteSequencesReader implements Closeable {
     private final DataInput is;
