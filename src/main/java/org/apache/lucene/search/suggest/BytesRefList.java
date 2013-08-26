@@ -32,7 +32,8 @@ import org.apache.lucene.util.SorterTemplate;
  * A simple append only random-access {@link BytesRef} array that stores full
  * copies of the appended bytes in a {@link ByteBlockPool}.
  * 
- * 
+ *  一个简单的append only，支持随机访问的的Bytesef数组
+ *  Bytesef相当于byte[]，不过在这基础上附加了offset和length属性
  * <b>Note: This class is not Thread-Safe!</b>
  * 
  * @lucene.internal
@@ -40,10 +41,10 @@ import org.apache.lucene.util.SorterTemplate;
  */
 public final class BytesRefList {
   // TODO rename to BytesRefArray
-  private final ByteBlockPool pool;
-  private int[] offsets = new int[1];
-  private int lastElement = 0;
-  private int currentOffset = 0;
+	  private final ByteBlockPool pool;//实际用来保存数据的地方
+	  private int[] offsets = new int[1];//offsets[i]是第i个元素在pool中的offset。这也表明了这是一个append only的数组
+	  private int lastElement = 0;//最后一个元素的编号（也可以理解为元素个数）
+	  private int currentOffset = 0;//当前偏移量，下次就从这里开始写数据
   private final Counter bytesUsed = Counter.newCounter(false);
   
   /**
@@ -73,15 +74,15 @@ public final class BytesRefList {
    * @return the ordinal of the appended bytes
    */
   public int append(BytesRef bytes) {
-    if (lastElement >= offsets.length) {
+    if (lastElement >= offsets.length) {//如果元素个数过多，就把offsets扩容
       int oldLen = offsets.length;
       offsets = ArrayUtil.grow(offsets, offsets.length + 1);
-      bytesUsed.addAndGet((offsets.length - oldLen)
+      bytesUsed.addAndGet((offsets.length - oldLen)//从这个方法的命名上看这里有race condition
           * RamUsageEstimator.NUM_BYTES_INT);
     }
     pool.copy(bytes);
-    offsets[lastElement++] = currentOffset;
-    currentOffset += bytes.length;
+    offsets[lastElement++] = currentOffset;//保存当前元素的offset，然后元素个数自增
+    currentOffset += bytes.length;//更新offset
     return lastElement;
   }
   
@@ -100,9 +101,10 @@ public final class BytesRefList {
    * @return the <i>n'th</i> element of this {@link BytesRefList}
    */
   public BytesRef get(BytesRef spare, int ord) {
+	//所有的数据都放在pool中，所以要通过offset和length去pool中取
     if (lastElement > ord) {
-      spare.offset = offsets[ord];
-      spare.length = ord == lastElement - 1 ? currentOffset - spare.offset
+      spare.offset = offsets[ord];//offset直接通过ord（index）从数据中拿到
+      spare.length = ord == lastElement - 1 ? currentOffset - spare.offset//length就是offsets[ord + 1] - offsets[ord].但要判断ord是不是最后一个元素
           : offsets[ord + 1] - spare.offset;
       pool.copyFrom(spare);
       return spare;
